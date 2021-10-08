@@ -1,0 +1,238 @@
+#!/bin/bash
+
+set -x
+
+RADIUS=172.16.131.56,172.16.131.101,172.16.131.102,172.16.131.64
+SYSLOG1=syslog1
+ZABBIX=zabbix
+NET_EDGE_PPTP=172.16.136.0/30
+
+DNS1=172.16.132.240,172.16.128.244
+VOPROS1=172.16.72.248
+VOPROS2=172.16.72.251
+ORIONVC=172.16.132.228
+NET_VOPROS=172.16.72.0/24
+NET_EDU=172.16.57.0/24
+NET_IBM=172.16.38.0/24
+NET_HOSTS=172.16.131.0/24
+NET_SRV=172.16.132.0/22
+NET_VIDEO=172.16.144.0/24
+NET_ZONEC_WKS=172.16.169.0/24
+NET_ZONED_WKS=172.16.173.0/24
+IF_EXT1=eth3
+IP_EXT1=$(ip addr show ${IF_EXT1} | grep -m1 "inet\s" | cut -d" " -f6 | cut -d"/" -f1)
+IF_INT=eth0
+IF_EDGE_PPTP=eth2
+IF_VPN_SPB=tun100
+IP_SPB_LOCAL="172.16.80.0/21"
+IP_LAB_LOCAL="172.16.2.0/24"
+IP_ARCH_LOCAL="172.16.3.0/24"
+IP_KZN_LOCAL="172.16.8.0/24"
+IP_KZN_EDU="172.16.9.0/24"
+IP_EDU_SW="172.16.9.51"
+IP_PSK_LOCAL="172.16.16.0/24"
+IP_NSK_LOCAL="172.16.24.0/24"
+IP_EKB_LOCAL="172.16.96.0/24"
+IP_ASP_LOCAL="172.16.104.0/24"
+IP_PNIIIS_LOCAL="172.17.0.0/24"
+IP_SKTB16_LOCAL="172.16.128.0/24"
+IP_DZH_LOCAL="172.16.112.0/24"
+IP_SPB_DTS_LOCAL="172.16.88.0/21"
+IF_VPN_KZN=tun70
+IF_VPN_KZN2=tun71
+IP_KZN="178.207.157.152/29"
+IP_SPB="93.153.198.250/29,194.186.189.105/29"
+IP_ACCESS_OFFICES="172.16.132.0/24,172.16.161.0/24,172.16.165.0/24,172.16.169.0/24,172.16.173.0/24,${NET_IBM},${NET_VOPROS},${NET_EDU},${IP_PSK_LOCAL},${IP_SPB_LOCAL},${IP_NSK_LOCAL},${IP_SPB_DTS_LOCAL}"
+IP_ACCESS_PPTP="172.16.132.0/22,172.16.144.0/24,172.16.48.0/24,172.16.72.0/24,172.16.38.0/24,172.16.169.0/24,172.16.57.0/24,172.16.8.0/24,${IP_SPB_LOCAL},172.16.16.0/24,172.16.24.0/24"
+IP_ADMIN="172.16.169.140,172.16.169.33,172.16.128.0/21"
+IP_LAB=185.36.159.174
+IP_ARCH="89.31.91.200,46.39.53.112,89.19.178.157"
+
+IP_ACCESS_INFERNO="89.17.55.0/24"
+
+IPT=iptables
+
+$IPT -F
+$IPT -X
+$IPT -t nat -F
+$IPT -t nat -X
+$IPT -N forward-edge-pptp
+$IPT -N forward-ppp
+$IPT -N forward-kzn
+$IPT -t nat -N ipcustom
+$IPT -N input-dynamic
+$IPT -N input-dynamicblock
+$IPT -N forward-dynamic
+$IPT -N forward-dynamicblock
+
+$IPT -A INPUT -j input-dynamicblock
+$IPT -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+$IPT -A INPUT -i lo -j ACCEPT
+$IPT -A INPUT -i ${IF_INT} -s ${IP_ADMIN} -j ACCEPT
+$IPT -A INPUT -i ${IF_INT} -p udp --dport 123 -j ACCEPT
+$IPT -A INPUT -i ${IF_EDGE_PPTP} -p 112 -j ACCEPT
+$IPT -A INPUT -p ICMP --icmp-type 3 -j ACCEPT
+$IPT -A INPUT -p ICMP --icmp-type 4 -j ACCEPT
+$IPT -A INPUT -p ICMP --icmp-type 8 -j ACCEPT
+$IPT -A INPUT -p ICMP --icmp-type 12 -j ACCEPT
+$IPT -A INPUT -j input-dynamic
+#paveleckaya
+#$IPT -A INPUT -i ${IF_EXT1} -s 195.128.65.5 -j ACCEPT
+#$IPT -A INPUT -i ${IF_EXT1} -s 89.175.32.193 -j ACCEPT
+#$IPT -A INPUT -i ${IF_EXT1} -s 82.204.252.246 -j ACCEPT
+#spb openvpn
+$IPT -A INPUT -s ${IP_ACCESS_INFERNO} -j ACCEPT
+$IPT -A INPUT -i ${IF_EXT1} -p udp -s ${IP_SPB}  --dport 1252 -j ACCEPT
+#lab pptp
+$IPT -A INPUT -i ${IF_EXT1} -p tcp --dport 1723 -s ${IP_LAB} -j ACCEPT
+$IPT -A INPUT -i ${IF_EXT1} -p tcp --dport 1723 -s ${IP_ARCH} -j ACCEPT
+$IPT -A INPUT -i ${IF_INT} -p tcp --dport 1723 -s 172.16.169.0/24 -j ACCEPT
+$IPT -A INPUT -i ppp+ -p udp --dport 67 -j ACCEPT
+#kzn openvpn
+$IPT -A INPUT -i ${IF_EXT1} -p udp --dport 1270 -s ${IP_KZN} -j ACCEPT
+$IPT -A INPUT -i ${IF_EXT1} -p udp --dport 1271 -s ${IP_KZN} -j ACCEPT
+$IPT -A INPUT -i ${IF_VPN_KZN} -p 89 -s 10.0.32.16/28 -j ACCEPT
+$IPT -A INPUT -i ${IF_VPN_KZN2} -p 89 -s 10.0.32.16/28 -j ACCEPT
+#kzn iperf 2501
+$IPT -A INPUT -i ${IF_EXT1} -p tcp --dport 2501 -s ${IP_KZN} -j ACCEPT
+$IPT -A INPUT -i ${IF_VPN_KZN} -p tcp --dport 2501 -s 10.0.32.16/28 -j ACCEPT
+$IPT -A INPUT -i ${IF_VPN_KZN2} -p tcp --dport 2501 -s 10.0.32.16/28 -j ACCEPT
+$IPT -A INPUT -m limit --limit 3/minute --limit-burst 3 -j LOG --log-level debug --log-prefix "IPT INPUT packet died: "
+$IPT -A INPUT -j DROP
+
+$IPT -A FORWARD -j forward-dynamicblock
+$IPT -A FORWARD -f -m limit --limit 3/minute --limit-burst 3 -j LOG --log-level debug --log-prefix "IPT FRAGMENTED: "
+$IPT -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+$IPT -A FORWARD -i ${IF_INT} -o ${IF_EXT1} -j ACCEPT
+$IPT -A FORWARD -j forward-dynamic
+#SPB
+$IPT -A FORWARD -o ${IF_INT} -i ${IF_VPN_SPB} -j ACCEPT
+$IPT -A FORWARD -i ${IF_INT} -o ${IF_VPN_SPB} -j ACCEPT
+#KZN
+$IPT -A FORWARD -i ${IF_VPN_KZN} -j forward-kzn
+$IPT -A FORWARD -i ${IF_VPN_KZN2} -j forward-kzn
+$IPT -A FORWARD -o ${IF_VPN_KZN} -j forward-kzn
+$IPT -A FORWARD -o ${IF_VPN_KZN2} -j forward-kzn
+NET_OFFICES_LOCAL="${IP_LAB_LOCAL},${IP_SPB_LOCAL},${IP_ARCH_LOCAL},${IP_KZN_LOCAL},\
+${IP_PSK_LOCAL},${IP_NSK_LOCAL},${IP_EKB_LOCAL},${IP_ASP_LOCAL},${IP_PNIIIS_LOCAL},\
+${IP_SKTB16_LOCAL},${IP_DZH_LOCAL},${IP_SPB_DTS_LOCAL}"
+$IPT -A FORWARD -s ${NET_OFFICES_LOCAL} -d ${NET_OFFICES_LOCAL} -j ACCEPT
+
+$IPT -A forward-kzn -i ${IF_INT} -o ${IF_VPN_KZN} -j ACCEPT
+$IPT -A forward-kzn -o ${IF_INT} -i ${IF_VPN_KZN} -s 172.16.8.0/24,10.0.32.16/28 -d ${IP_ACCESS_OFFICES} -j ACCEPT
+$IPT -A forward-kzn -o ${IF_VPN_SPB} -i ${IF_VPN_KZN} -s 172.16.8.0/24,10.0.32.16/28 -d ${IP_SPB_LOCAL} -j ACCEPT
+$IPT -A forward-kzn -o ${IF_INT} -i ${IF_VPN_KZN} -s 10.0.32.16/28 -d ${SYSLOG1} -p udp --dport 514 -j ACCEPT
+$IPT -A forward-kzn -o ${IF_INT} -i ${IF_VPN_KZN} -s 172.16.8.200,172.16.8.201,172.16.8.202,172.16.8.51 -d ${SYSLOG1} -p udp --dport 514 -j ACCEPT
+$IPT -A forward-kzn -o ${IF_INT} -i ${IF_VPN_KZN} -s 172.16.8.200,172.16.8.201,172.16.8.202,172.16.8.51 -d ${ZABBIX} -p udp --dport 162 -j ACCEPT
+$IPT -A forward-kzn -o ${IF_INT} -i ${IF_VPN_KZN} -s 172.16.8.230,172.16.8.231,172.16.8.240,10.0.32.16/28 -d ${ZABBIX} -p tcp --dport 10051 -j ACCEPT
+$IPT -A forward-kzn -i ${IF_INT} -o ${IF_VPN_KZN2} -j ACCEPT
+$IPT -A forward-kzn -o ${IF_INT} -i ${IF_VPN_KZN2} -s 172.16.8.0/24,10.0.32.16/28 -d ${IP_ACCESS_OFFICES} -j ACCEPT
+$IPT -A forward-kzn -o ${IF_VPN_SPB} -i ${IF_VPN_KZN2} -s 172.16.8.0/24,10.0.32.16/28 -d ${IP_SPB_LOCAL} -j ACCEPT
+$IPT -A forward-kzn -o ${IF_INT} -i ${IF_VPN_KZN2} -s 10.0.32.16/28 -d ${SYSLOG1} -p udp --dport 514 -j ACCEPT
+$IPT -A forward-kzn -o ${IF_INT} -i ${IF_VPN_KZN2} -s 172.16.8.200,172.16.8.201,172.16.8.202,172.16.8.51 -d ${SYSLOG1} -p udp --dport 514 -j ACCEPT
+$IPT -A forward-kzn -o ${IF_INT} -i ${IF_VPN_KZN2} -s 172.16.8.200,172.16.8.201,172.16.8.202,172.16.8.51 -d ${ZABBIX} -p udp --dport 162 -j ACCEPT
+$IPT -A forward-kzn -o ${IF_INT} -i ${IF_VPN_KZN2} -s 172.16.8.230,172.16.8.231,172.16.8.240,10.0.32.16/28 -d ${ZABBIX} -p tcp --dport 10051 -j ACCEPT
+$IPT -A forward-kzn -o ${IF_VPN_KZN} -i ${IF_VPN_SPB} -d 172.16.8.0/24 -s ${IP_SPB_LOCAL} -j ACCEPT
+$IPT -A forward-kzn -o ${IF_VPN_KZN2} -i ${IF_VPN_SPB} -d 172.16.8.0/24 -s ${IP_SPB_LOCAL} -j ACCEPT
+$IPT -A forward-kzn -s ${IP_KZN_EDU} -d crm.tpcorp.ru,web.tp.ru,sp.tpcorp.ru -j ACCEPT
+$IPT -A forward-kzn -p udp -s ${IP_EDU_SW} -d 172.16.131.53 --dport 514 -j ACCEPT
+
+#$IPT -A FORWARD -p udp -d 172.16.38.172 --dport 5060 -j ACCEPT
+$IPT -A FORWARD -p tcp -d 172.16.132.248 --dport 1950 -j ACCEPT
+$IPT -A FORWARD -p tcp -d 172.16.131.2 --dport 1950 -j ACCEPT
+$IPT -A FORWARD -p tcp -d ${VOPROS1} --dport 443 -j ACCEPT
+$IPT -A FORWARD -p tcp -d ${VOPROS1} -s 90.156.153.164 --dport 3306 -j ACCEPT
+$IPT -A FORWARD -p tcp -d ${VOPROS1} --dport 22 -j ACCEPT
+$IPT -A FORWARD -p tcp -d ${VOPROS2} --dport 22 -j ACCEPT
+$IPT -A FORWARD -d ${ORIONVC} -p tcp --dport 80 -j ACCEPT
+$IPT -A FORWARD -i ${IF_EDGE_PPTP} -j forward-edge-pptp
+$IPT -A FORWARD -i ${IF_INT} -o ${IF_EDGE_PPTP} -j ACCEPT
+$IPT -A FORWARD -i ${IF_INT} -o ppp+ -j ACCEPT
+$IPT -A FORWARD -o ${IF_INT} -i ppp+ -j forward-ppp
+$IPT -A FORWARD -m limit --limit 3/minute --limit-burst 3 -j LOG --log-level debug --log-prefix "IPT FORWARD packet died: "
+$IPT -A FORWARD -j DROP
+
+$IPT -A forward-edge-pptp -p udp -d ${DNS1} --dport 53 -j ACCEPT
+$IPT -A forward-edge-pptp -p icmp -d ${DNS1} -j ACCEPT
+$IPT -A forward-edge-pptp -p udp -s ${NET_EDGE_PPTP} -d ${RADIUS} --dport 1812:1813 -j ACCEPT
+$IPT -A forward-edge-pptp -p udp -s ${NET_EDGE_PPTP} -d ${SYSLOG1} --dport 514 -j ACCEPT
+#pool main
+#$IPT -A forward-edge-pptp -s 10.0.40.0/24 -d ${NET_HOSTS} -j ACCEPT
+$IPT -A forward-edge-pptp -s 10.0.40.0/24,10.0.44.0/24 -d ${IP_ACCESS_PPTP} -j ACCEPT
+$IPT -A forward-edge-pptp -s 10.0.40.0/24,10.0.44.0/24 -d ${NET_SRV} -j ACCEPT
+$IPT -A forward-edge-pptp -s 10.0.40.0/24,10.0.44.0/24 -d ${NET_VOPROS} -j ACCEPT
+$IPT -A forward-edge-pptp -s 10.0.40.0/24,10.0.44.0/24 -d ${NET_IBM} -j ACCEPT
+$IPT -A forward-edge-pptp -s 10.0.40.0/24,10.0.44.0/24 -d ${NET_ZONEC_WKS} -j ACCEPT
+#$IPT -A forward-edge-pptp -s 10.0.40.0/24,10.0.44.0/24 -d ${NET_ZONED_WKS} -j ACCEPT
+$IPT -A forward-edge-pptp -s 10.0.40.0/24,10.0.44.0/24 -d ${NET_EDU} -j ACCEPT
+$IPT -A forward-edge-pptp -s 10.0.40.0/24,10.0.44.0/24 -d ${NET_VIDEO} -j ACCEPT
+$IPT -A forward-edge-pptp -s 10.0.40.0/24,10.0.44.0/24 -d ${IP_KZN_LOCAL} -j ACCEPT
+#pool lab
+#$IPT -A forward-edge-pptp -s 10.0.41.0/24 -d ${NET_HOSTS} -j ACCEPT
+$IPT -A forward-edge-pptp -s 10.0.41.0/24 -d ${NET_SRV} -j ACCEPT
+$IPT -A forward-edge-pptp -s 10.0.41.0/24 -d ${NET_VOPROS} -j ACCEPT
+$IPT -A forward-edge-pptp -s 10.0.41.0/24 -d ${NET_IBM} -j ACCEPT
+#pool korus
+$IPT -A forward-edge-pptp -s 10.0.42.0/24,10.0.43.0/24,10.0.53.0/24 -d ${NET_IBM},${NET_SRV},${NET_VOPROS} -j ACCEPT
+
+#lab pptp
+$IPT -A forward-ppp -s 10.0.41.0/24 -d ${IP_ACCESS_OFFICES} -j ACCEPT
+$IPT -A forward-ppp -s 172.16.2.0/24 -d ${IP_ACCESS_OFFICES} -j ACCEPT
+$IPT -A forward-ppp -s 172.16.3.0/24 -d ${IP_ACCESS_OFFICES} -j ACCEPT
+$IPT -A forward-ppp -s 10.0.41.0/24 -d ${NET_SRV} -j ACCEPT
+$IPT -A forward-ppp -s 10.0.41.0/24 -d ${NET_IBM} -j ACCEPT
+$IPT -A forward-ppp -s 10.0.41.0/24 -d ${NET_VOPROS} -j ACCEPT
+$IPT -A forward-ppp -s 172.16.2.0/24 -d ${NET_SRV} -j ACCEPT
+$IPT -A forward-ppp -s 172.16.2.0/24 -d ${NET_IBM} -j ACCEPT
+$IPT -A forward-ppp -s 172.16.2.0/24 -d ${NET_VOPROS} -j ACCEPT
+$IPT -A forward-ppp -s 172.16.3.0/24 -d ${NET_SRV} -j ACCEPT
+$IPT -A forward-ppp -s 172.16.3.0/24 -d ${NET_IBM} -j ACCEPT
+$IPT -A forward-ppp -s 172.16.3.0/24 -d ${NET_VOPROS} -j ACCEPT
+$IPT -A forward-ppp -p tcp -s 172.16.2.231,172.16.2.232 -d ${ZABBIX} --dport 10051 -j ACCEPT
+
+#ntp fix. if not allowed incoming traffic UDP:123. snat from udp:119
+#$IPT -t nat -A POSTROUTING -o ${IF_EXT1} -p udp --sport 123 --dport 123 -j SNAT --to-source ${IP_EXT1}:119
+
+#$IPT -I INPUT -i eth3 -j ACCEPT
+
+$IPT -t nat -A POSTROUTING -o ${IF_EXT1} -j ipcustom
+$IPT -t nat -A POSTROUTING -o ${IF_EXT1} -j SNAT --to-source ${IP_EXT1}
+$IPT -t nat -A POSTROUTING -o ${IF_INT} -s 172.16.128.0/18 -p tcp -d ${ORIONVC} --dport 80 -j SNAT --to-source 172.16.128.254
+
+$IPT -t nat -A PREROUTING -p tcp -i ${IF_EXT1} -d ${IP_EXT1} --dport 4499 -j DNAT --to-destination 172.16.38.79:22
+$IPT  -I FORWARD -d 172.16.38.79 -j ACCEPT
+
+
+$IPT -t nat -A PREROUTING -p tcp -i ${IF_EXT1} -d ${IP_EXT1} --dport 3390 -j DNAT --to-destination 172.16.169.24:3389
+$IPT -t nat -A PREROUTING -p tcp -i ${IF_EXT1} -d ${IP_EXT1} --dport 3391 -j DNAT --to-destination 172.16.131.19:3389
+$IPT -t nat -A PREROUTING -p tcp -i ${IF_EXT1} -d ${IP_EXT1} --dport 3392 -j DNAT --to-destination 172.16.131.23:3389
+$IPT -t nat -A PREROUTING -p tcp -i ${IF_EXT1} -d ${IP_EXT1} --dport 1950 -j DNAT --to-destination 172.16.132.248
+$IPT -t nat -A PREROUTING -p tcp -i ${IF_EXT1} -d ${IP_EXT1} --dport 1955 -j DNAT --to-destination 172.16.131.2:1950
+$IPT -t nat -A PREROUTING -p tcp -i ${IF_EXT1} -d ${IP_EXT1} --dport 443 -j DNAT --to-destination ${VOPROS1}
+$IPT -t nat -A PREROUTING -p tcp -i ${IF_EXT1} -d ${IP_EXT1} --dport 5306 -j DNAT --to-destination ${VOPROS1}:3306
+$IPT -t nat -A PREROUTING -p tcp -i ${IF_EXT1} -d ${IP_EXT1} --dport 32 -j DNAT --to-destination ${VOPROS1}:22
+$IPT -t nat -A PREROUTING -p tcp -i ${IF_EXT1} -d ${IP_EXT1} --dport 42 -j DNAT --to-destination ${VOPROS2}:22
+$IPT -t nat -A PREROUTING -p tcp -s 5.134.217.86 -d ${IP_EXT1} --dport 81 -j DNAT --to-destination ${ORIONVC}:80
+#$IPT -t nat -A PREROUTING -p udp -i ${IF_EXT1} -d ${IP_EXT1} --dport 5060 -j DNAT --to-destination 172.16.38.172
+$IPT -t nat -A POSTROUTING -o ${IF_INT}  -p tcp --dport 22 -d 172.16.38.79 -j SNAT --to-source ${IP_EXT1}
+$IPT -t nat -A POSTROUTING -o ${IF_INT}  -p tcp --dport 3389 -d 172.16.169.24 -j SNAT --to-source ${IP_EXT1}
+$IPT -t nat -A POSTROUTING -o ${IF_INT}  -p tcp --dport 3389 -d 172.16.131.19 -j SNAT --to-source ${IP_EXT1}
+$IPT -t nat -A POSTROUTING -o ${IF_INT}  -p tcp --dport 3389 -d 172.16.131.23 -j SNAT --to-source ${IP_EXT1}
+
+$IPT -t nat -A POSTROUTING -o ${IF_INT}  -p tcp --dport 1950 -d 172.16.131.2 -j SNAT --to-source ${IP_EXT1}
+$IPT -t nat -A POSTROUTING -o ${IF_INT}  -p tcp --dport 1950 -d 172.16.132.248 -j SNAT --to-source ${IP_EXT1}
+
+$IPT -t nat -A POSTROUTING -o ${IF_INT}  -p tcp --dport 443 -d ${VOPROS1} -j SNAT --to-source 172.16.128.254
+$IPT -t nat -A POSTROUTING -o ${IF_INT}  -p tcp --dport 3306 -d ${VOPROS1} -j SNAT --to-source 172.16.128.254
+$IPT -t nat -A POSTROUTING -o ${IF_INT}  -p tcp --dport 22 -d ${VOPROS1} -j SNAT --to-source 172.16.128.254
+$IPT -t nat -A POSTROUTING -o ${IF_INT}  -p tcp --dport 22 -d ${VOPROS2} -j SNAT --to-source 172.16.128.254
+
+
+$IPT -t raw -F
+#$IPT -t raw -A PREROUTING -i ${IF_INT} -d 10.0.0.0/8 -j CT --notrack
+#$IPT -t raw -A PREROUTING -i ${IF_INT} -d 172.16.0.0/12 -j CT --notrack
+#$IPT -t raw -A PREROUTING -i ${IF_INT} -d 192.168.0.0/16 -j CT --notrack
+$IPT -t raw -A PREROUTING -p tcp --dport 1723 -j CT --helper pptp
+$IPT -t raw -A PREROUTING -p tcp --dport 21 -j CT --helper ftp
+$IPT -t raw -A PREROUTING -p udp --dport 5060 -j CT --helper sip
+$IPT -t raw -A PREROUTING -p tcp --dport 5060 -j CT --helper sip
